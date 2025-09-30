@@ -13,12 +13,13 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ECR_REPO: ${{ secrets.ECR_REPO_NAME }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      ECR_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
       CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
       SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
@@ -34,15 +35,15 @@ jobs:
       - name: Build Docker image
         run: |
           IMAGE_TAG=${{ github.sha }}
-          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:$IMAGE_TAG
+          IMAGE_URI=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO_NAME }}:$IMAGE_TAG
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
           docker build -t $IMAGE_URI ./app
 
-      - name: Push to ECR
+      - name: Push Docker image to ECR
         run: |
           docker push $IMAGE_URI
 
-      - name: Fill Task Definition
+      - name: Fill in Task Definition
         run: |
           sed -e "s|__IMAGE_URI__|$IMAGE_URI|g" ecs/task-definition.json.tpl > task-def.json
           sed -i "s|\${AWS_REGION}|${{ env.AWS_REGION }}|g" task-def.json
