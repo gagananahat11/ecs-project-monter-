@@ -6,14 +6,16 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPO: ${{ secrets.ECR_REPO_NAME }}
-  CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
-  SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
   TASK_FAMILY: ecs-sample-app-task
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
+    env:
+      ECR_REPO: ${{ secrets.ECR_REPO_NAME }}
+      CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
+      SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
 
     steps:
       - name: Checkout
@@ -33,8 +35,8 @@ jobs:
         run: |
           IMAGE_TAG=${{ github.sha }}
           IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}:$IMAGE_TAG
-          docker build -t $IMAGE_URI ./app
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          docker build -t $IMAGE_URI ./app
 
       - name: Push to ECR
         run: |
