@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'ecs-sample-app'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['<APP_TASK_IP>:3000']  # For production, replace with service discovery or use ECS service metrics exporter.
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
