@@ -14,7 +14,7 @@ jobs:
 
     env:
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      ECR_REPO_NAME: ${{ secrets.ECR_REPO_NAME }}
+      ECR_REPO_NAME: ecs/dev
       CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
       SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
 
