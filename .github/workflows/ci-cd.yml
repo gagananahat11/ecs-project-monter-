@@ -1,63 +1,38 @@
-name: CI/CD to ECS (ECR)
+name: Push to ECR with OIDC
 
 on:
   push:
     branches: [ master ]
 
-env:
-  AWS_REGION: us-east-1
-  TASK_FAMILY: ecs-sample-app-task
-
 jobs:
-  build-and-deploy:
+  push-image:
     runs-on: ubuntu-latest
 
+    permissions:
+      id-token: write
+      contents: read
+
     env:
-      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_REGION: us-east-1
+      AWS_ACCOUNT_ID: 963057650842
       ECR_REPO_NAME: ecs/dev
-      CLUSTER_NAME: ${{ secrets.ECS_CLUSTER_NAME }}
-      SERVICE_NAME: ${{ secrets.ECS_SERVICE_NAME }}
 
-     steps:
-    #   - name: Checkout code
-    #     uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    #   - name: Configure AWS credentials
-    #     uses: aws-actions/configure-aws-credentials@v2
-    #     with:
-    #       aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    #       aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    #       aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::963057650842:role/GitHubActionsRole
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Docker image
+      - name: Build and push Docker image
         run: |
           IMAGE_TAG=${{ github.sha }}
           IMAGE_URI=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO_NAME }}:$IMAGE_TAG
-          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
           docker build -t $IMAGE_URI ./app
-
-      - name: Push Docker image to ECR
-        run: |
           docker push $IMAGE_URI
-
-      - name: Fill in Task Definition
-        run: |
-          sed -e "s|__IMAGE_URI__|$IMAGE_URI|g" ecs/task-definition.json.tpl > task-def.json
-          sed -i "s|\${AWS_REGION}|${{ env.AWS_REGION }}|g" task-def.json
-          sed -i "s|\${EXEC_ROLE_ARN}|${{ secrets.ECS_TASK_EXEC_ROLE_ARN }}|g" task-def.json
-
-      - name: Register Task Definition
-        run: |
-          aws ecs register-task-definition --cli-input-json file://task-def.json > task-def-register.json
-          TASK_DEF_ARN=$(jq -r '.taskDefinition.taskDefinitionArn' task-def-register.json)
-          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
-
-      - name: Update ECS service
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.CLUSTER_NAME }} \
-            --service ${{ env.SERVICE_NAME }} \
-            --task-definition $TASK_DEF_ARN
