@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   res.json({ message: 'Hello from ECS app!', time: new Date() });
 });
-
+// demo
 app.get('/metrics', (req, res) => {
   res.send(`# HELP example_requests_total Example metric\nexample_requests_total 1\n`);
 });
