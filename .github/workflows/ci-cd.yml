@@ -35,10 +35,8 @@ jobs:
         id: dtag
         run: |
           set -e
-          # Get branch name and commit hash
           BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | sed 's/\//_/g')
           COMMIT_SHA=$(git rev-parse --short HEAD)
-          # Save as environment variables
           echo "DTAG_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV  
           echo "DTAG_SHA=$COMMIT_SHA" >> $GITHUB_ENV
           echo "✅ Branch: $BRANCH_NAME"
@@ -60,12 +58,10 @@ jobs:
       - name: Build and Push Docker Image
         run: |
           set -e
-          # Docker image tag with commit SHA
           IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:${{ env.DTAG_SHA }}
           echo "Building Docker image: $IMAGE_URI"
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
-          # Save image URI for later deployment steps
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
           echo "✅ Docker image pushed successfully."
 
