@@ -36,11 +36,8 @@ jobs:
         run: |
           set -e
           BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | sed 's/\//_/g')
-          COMMIT_SHA=$(git rev-parse --short HEAD)
-          echo "DTAG_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV  
-          echo "DTAG_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+          echo "DTAG_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV
           echo "✅ Branch: $BRANCH_NAME"
-          echo "✅ Commit: $COMMIT_SHA"
 
       # -------------------- STEP 3 --------------------
       - name: Configure AWS credentials
@@ -55,10 +52,10 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
 
       # -------------------- STEP 5 --------------------
-      - name: Build and Push Docker Image
+      - name: Build and Push Docker Image (latest)
         run: |
           set -e
-          IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:${{ env.DTAG_SHA }}
+          IMAGE_URI=${{ secrets.AWS_ECR_REPO }}
           echo "Building Docker image: $IMAGE_URI"
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
