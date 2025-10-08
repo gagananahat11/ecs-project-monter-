@@ -25,6 +25,7 @@ jobs:
       AWS_ECR_REPO: ${{ secrets.AWS_ECR_REPO }}
 
     steps:
+
       # -------------------- STEP 1 --------------------
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,8 +35,10 @@ jobs:
         id: dtag
         run: |
           set -e
+          # Get branch name and commit hash
           BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | sed 's/\//_/g')
           COMMIT_SHA=$(git rev-parse --short HEAD)
+          # Save as environment variables
           echo "DTAG_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV  
           echo "DTAG_SHA=$COMMIT_SHA" >> $GITHUB_ENV
           echo "✅ Branch: $BRANCH_NAME"
@@ -57,10 +60,12 @@ jobs:
       - name: Build and Push Docker Image
         run: |
           set -e
+          # Docker image tag with commit SHA
           IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:${{ env.DTAG_SHA }}
-          echo "Building image: $IMAGE_URI"
+          echo "Building Docker image: $IMAGE_URI"
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
+          # Save image URI for later deployment steps
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
           echo "✅ Docker image pushed successfully."
 
@@ -93,14 +98,14 @@ jobs:
           echo "Service: $SERVICE_NAME"
           echo "Using image: $IMAGE_URI"
 
-          # Get current task definition
+          # Get the current ECS task definition
           OLD_TASK_DEF=$(aws ecs describe-services \
             --cluster $CLUSTER_NAME \
             --services $SERVICE_NAME \
             --query "services[0].taskDefinition" \
             --output text)
 
-          # Create a new task definition with updated image
+          # Update the container image for 'activity-to-ef-mapping' container
           aws ecs describe-task-definition --task-definition $OLD_TASK_DEF --query "taskDefinition" | \
             jq --arg IMAGE "$IMAGE_URI" \
             '.containerDefinitions |= map(if .name == "activity-to-ef-mapping" then .image = $IMAGE else . end) |
@@ -113,7 +118,7 @@ jobs:
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
 
-          # Update ECS Service
+          # Update ECS Service to use the new task definition
           aws ecs update-service \
             --cluster $CLUSTER_NAME \
             --service $SERVICE_NAME \
