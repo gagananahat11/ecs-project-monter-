@@ -1,4 +1,4 @@
-name: CI/CD to ECS (ECR)
+name: CI/CD to ECS (ECR Direct Push)
 
 on:
   push:
@@ -25,7 +25,6 @@ jobs:
       AWS_ECR_REPO: ${{ secrets.AWS_ECR_REPO }}
 
     steps:
-
       # -------------------- STEP 1 --------------------
       - name: Checkout code
         uses: actions/checkout@v4
@@ -55,12 +54,12 @@ jobs:
       - name: Build and Push Docker Image (latest)
         run: |
           set -e
-          IMAGE_URI=${{ secrets.AWS_ECR_REPO }}
+          IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:latest
           echo "Building Docker image: $IMAGE_URI"
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
-          echo "✅ Docker image pushed successfully."
+          echo "✅ Docker image pushed successfully as :latest"
 
       # -------------------- STEP 6 --------------------
       - name: Determine Deployment Environment
@@ -90,28 +89,28 @@ jobs:
           echo "🚀 Deploying to ECS Cluster: $CLUSTER_NAME"
           echo "Service: $SERVICE_NAME"
           echo "Using image: $IMAGE_URI"
-#coole
-          # Get the current ECS task definition
+
+          # Get current ECS task definition
           OLD_TASK_DEF=$(aws ecs describe-services \
             --cluster $CLUSTER_NAME \
             --services $SERVICE_NAME \
             --query "services[0].taskDefinition" \
             --output text)
 
-          # Update the container image for 'activity-to-ef-mapping' container
+          # Update the container image to :latest
           aws ecs describe-task-definition --task-definition $OLD_TASK_DEF --query "taskDefinition" | \
             jq --arg IMAGE "$IMAGE_URI" \
             '.containerDefinitions |= map(if .name == "activity-to-ef-mapping" then .image = $IMAGE else . end) |
              {family: .family, containerDefinitions: .containerDefinitions, taskRoleArn: .taskRoleArn, executionRoleArn: .executionRoleArn, networkMode: .networkMode}' \
             > new-task-def.json
 
-          # Register the new task definition
+          # Register new task definition
           NEW_TASK_DEF=$(aws ecs register-task-definition \
             --cli-input-json file://new-task-def.json \
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
 
-          # Update ECS Service to use the new task definition
+          # Force ECS to deploy the new definition
           aws ecs update-service \
             --cluster $CLUSTER_NAME \
             --service $SERVICE_NAME \
