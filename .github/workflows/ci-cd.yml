@@ -36,11 +36,11 @@ jobs:
           set -e
           BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | sed 's/\//_/g')
           echo "DTAG_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV
-          echo "✅ Branch: $BRANCH_NAME"
+          echo "✅ Branch detected: $BRANCH_NAME"
 
       # -------------------- STEP 3 --------------------
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -48,16 +48,25 @@ jobs:
 
       # -------------------- STEP 4 --------------------
       - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       # -------------------- STEP 5 --------------------
       - name: Build and Push Docker Image (latest)
         run: |
           set -e
+          echo "📁 Current directory:"
+          pwd
+          echo "📄 Files in repo root:"
+          ls -la
+
+          cd $GITHUB_WORKSPACE
+
           IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:latest
           echo "Building Docker image: $IMAGE_URI"
-          docker build -t $IMAGE_URI -f ./app/Dockerfile ./app
+
+          docker build -t $IMAGE_URI -f Dockerfile .
           docker push $IMAGE_URI
+
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
           echo "✅ Docker image pushed successfully as :latest"
 
@@ -68,11 +77,11 @@ jobs:
           if [[ "${{ env.DTAG_BRANCH }}" == "develop" ]]; then
             echo "ECS_CLUSTER=${{ env.ECS_DEV_CLUSTER }}" >> $GITHUB_ENV
             echo "ECS_SERVICE=${{ env.ECS_DEV_SERVICE }}" >> $GITHUB_ENV
-            echo "Deploying to DEV environment."
+            echo "🚀 Deploying to DEV environment."
           elif [[ "${{ env.DTAG_BRANCH }}" == release* ]]; then
             echo "ECS_CLUSTER=${{ env.ECS_PROD_CLUSTER }}" >> $GITHUB_ENV
             echo "ECS_SERVICE=${{ env.ECS_PROD_SERVICE }}" >> $GITHUB_ENV
-            echo "Deploying to PROD environment."
+            echo "🚀 Deploying to PROD environment."
           else
             echo "❌ Error: Unknown environment for branch ${{ env.DTAG_BRANCH }}"
             exit 1
@@ -85,35 +94,38 @@ jobs:
           CLUSTER_NAME="${{ env.ECS_CLUSTER }}"
           SERVICE_NAME="${{ env.ECS_SERVICE }}"
           IMAGE_URI="${{ env.IMAGE_URI }}"
+          CONTAINER_NAME="activity-to-ef-mapping"  # 🔹 change this to your ECS container name
 
-          echo "🚀 Deploying to ECS Cluster: $CLUSTER_NAME"
+          echo "🛰 Deploying to ECS Cluster: $CLUSTER_NAME"
           echo "Service: $SERVICE_NAME"
           echo "Using image: $IMAGE_URI"
 
-          # Get current ECS task definition
+          # Get current task definition
           OLD_TASK_DEF=$(aws ecs describe-services \
             --cluster $CLUSTER_NAME \
             --services $SERVICE_NAME \
             --query "services[0].taskDefinition" \
             --output text)
 
-          # Update the container image to :latest
-          aws ecs describe-task-definition --task-definition $OLD_TASK_DEF --query "taskDefinition" | \
-            jq --arg IMAGE "$IMAGE_URI" \
-            '.containerDefinitions |= map(if .name == "activity-to-ef-mapping" then .image = $IMAGE else . end) |
+          # Create new task definition JSON with updated image
+          aws ecs describe-task-definition --task-definition $OLD_TASK_DEF --query "taskDefinition" > old-task-def.json
+
+          jq --arg IMAGE "$IMAGE_URI" --arg NAME "$CONTAINER_NAME" \
+            '.containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end) |
              {family: .family, containerDefinitions: .containerDefinitions, taskRoleArn: .taskRoleArn, executionRoleArn: .executionRoleArn, networkMode: .networkMode}' \
-            > new-task-def.json
-          # logs 
-          # Register new task definition
+            old-task-def.json > new-task-def.json
+
+          # Register the new task definition
           NEW_TASK_DEF=$(aws ecs register-task-definition \
             --cli-input-json file://new-task-def.json \
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
 
-          # Force ECS to deploy the new definition
+          # Update ECS Service to use new task definition
           aws ecs update-service \
             --cluster $CLUSTER_NAME \
             --service $SERVICE_NAME \
-            --task-definition $NEW_TASK_DEF
+            --task-definition $NEW_TASK_DEF \
+            --force-new-deployment
 
-          echo "✅ ECS Service updated successfully!"
+          echo "✅ ECS service updated successfully with new image!"
