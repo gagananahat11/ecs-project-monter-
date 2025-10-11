@@ -8,7 +8,7 @@ on:
       - develop
 
 env:
-  AWS_REGION: ap-south-1
+  AWS_REGION: us-east-1
   TASK_FAMILY: ecs-sample-app-task
 
 jobs:
@@ -25,34 +25,33 @@ jobs:
       AWS_ECR_REPO: ${{ secrets.AWS_ECR_REPO }}
 
     steps:
-
-      # -------------------- STEP 1: Checkout Code --------------------
-      - name: Checkout Code
+      # -------------------- STEP 1 --------------------
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # -------------------- STEP 2: Set Branch Parameter --------------------
-      - name: Set Branch Parameter
-        id: branch
+      # -------------------- STEP 2 --------------------
+      - name: Set Build Parameters
+        id: dtag
         run: |
           set -e
           BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | sed 's/\//_/g')
           echo "DTAG_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV
-          echo "✅ Branch detected: $BRANCH_NAME"
+          echo "✅ Branch: $BRANCH_NAME"
 
-      # -------------------- STEP 3: Configure AWS Credentials --------------------
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      # -------------------- STEP 3 --------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # -------------------- STEP 4: Login to Amazon ECR --------------------
+      # -------------------- STEP 4 --------------------
       - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@v1
 
-      # -------------------- STEP 5: Build and Push Docker Image --------------------
-      - name: Build and Push Docker Image (:latest)
+      # -------------------- STEP 5 --------------------
+      - name: Build and Push Docker Image (latest)
         run: |
           set -e
           echo "📁 Current directory:"
@@ -60,55 +59,63 @@ jobs:
           echo "📄 Files in repo root:"
           ls -la
 
-          cd $GITHUB_WORKSPACE
-
           IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:latest
-          echo "📦 Building Docker image: $IMAGE_URI"
+          echo "Building Docker image: $IMAGE_URI"
 
-          docker build --no-cache -t $IMAGE_URI -f ./app/Dockerfile ./app
+          docker build -t $IMAGE_URI -f ./app/Dockerfile ./app
           docker push $IMAGE_URI
 
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
           echo "✅ Docker image pushed successfully as :latest"
 
-      # -------------------- STEP 6: Determine Deployment Environment --------------------
+      # -------------------- STEP 6 --------------------
+      - name: Determine Deployment Environment
+        run: |
+          set -e
+          if [[ "$DTAG_BRANCH" == "develop" ]]; then
+            echo "ECS_CLUSTER=${ECS_DEV_CLUSTER}" >> $GITHUB_ENV
+            echo "ECS_SERVICE=${ECS_DEV_SERVICE}" >> $GITHUB_ENV
+            echo "🚀 Deploying to DEV environment."
+          elif [[ "$DTAG_BRANCH" == release* ]]; then
+            echo "ECS_CLUSTER=${ECS_PROD_CLUSTER}" >> $GITHUB_ENV
+            echo "ECS_SERVICE=${ECS_PROD_SERVICE}" >> $GITHUB_ENV
+            echo "🚀 Deploying to PROD environment."
+          else
+            echo "❌ Error: Unknown environment for branch $DTAG_BRANCH"
+            exit 1
+          fi
 
-      # -------------------- STEP 7: Deploy to ECS --------------------
+      # -------------------- STEP 7 --------------------
       - name: Deploy to ECS
         run: |
           set -e
-          CLUSTER_NAME="${{ env.ECS_CLUSTER }}"
-          SERVICE_NAME="${{ env.ECS_SERVICE }}"
-          IMAGE_URI="${{ env.IMAGE_URI }}"
-          CONTAINER_NAME="activity-to-ef-mapping"  # 🔹 replace with your ECS container name
+          CLUSTER_NAME="$ECS_CLUSTER"
+          SERVICE_NAME="$ECS_SERVICE"
+          IMAGE_URI="$IMAGE_URI"
+          CONTAINER_NAME="activity-to-ef-mapping"  # 🔹 change to your ECS container name
 
           echo "🛰 Deploying to ECS Cluster: $CLUSTER_NAME"
           echo "Service: $SERVICE_NAME"
           echo "Using image: $IMAGE_URI"
 
-          # Get current task definition
           OLD_TASK_DEF=$(aws ecs describe-services \
             --cluster $CLUSTER_NAME \
             --services $SERVICE_NAME \
             --query "services[0].taskDefinition" \
             --output text)
 
-          # Save old task definition
           aws ecs describe-task-definition --task-definition $OLD_TASK_DEF --query "taskDefinition" > old-task-def.json
 
-          # Update container image in task definition
           jq --arg IMAGE "$IMAGE_URI" --arg NAME "$CONTAINER_NAME" \
             '.containerDefinitions |= map(if .name == $NAME then .image = $IMAGE else . end) |
              {family: .family, containerDefinitions: .containerDefinitions, taskRoleArn: .taskRoleArn, executionRoleArn: .executionRoleArn, networkMode: .networkMode}' \
             old-task-def.json > new-task-def.json
 
-          # Register new task definition
           NEW_TASK_DEF=$(aws ecs register-task-definition \
             --cli-input-json file://new-task-def.json \
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
 
-          # Update ECS service to use new task definition
           aws ecs update-service \
             --cluster $CLUSTER_NAME \
             --service $SERVICE_NAME \
