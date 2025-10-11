@@ -72,21 +72,6 @@ jobs:
           echo "✅ Docker image pushed successfully as :latest"
 
       # -------------------- STEP 6: Determine Deployment Environment --------------------
-      - name: Determine Deployment Environment
-        run: |
-          set -e
-          if [[ "${{ env.DTAG_BRANCH }}" == "develop" ]]; then
-            echo "ECS_CLUSTER=${{ env.ECS_DEV_CLUSTER }}" >> $GITHUB_ENV
-            echo "ECS_SERVICE=${{ env.ECS_DEV_SERVICE }}" >> $GITHUB_ENV
-            echo "🚀 Deploying to DEV environment."
-          elif [[ "${{ env.DTAG_BRANCH }}" == release* ]]; then
-            echo "ECS_CLUSTER=${{ env.ECS_PROD_CLUSTER }}" >> $GITHUB_ENV
-            echo "ECS_SERVICE=${{ env.ECS_PROD_SERVICE }}" >> $GITHUB_ENV
-            echo "🚀 Deploying to PROD environment."
-          else
-            echo "❌ Unknown branch: ${{ env.DTAG_BRANCH }}"
-            exit 1
-          fi
 
       # -------------------- STEP 7: Deploy to ECS --------------------
       - name: Deploy to ECS
