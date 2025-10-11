@@ -1,4 +1,4 @@
-name: CI/CD to ECS (ECR)
+name: CI/CD to ECS (ECR Direct Push)
 
 on:
   push:
@@ -25,7 +25,6 @@ jobs:
       AWS_ECR_REPO: ${{ secrets.AWS_ECR_REPO }}
 
     steps:
-
       # -------------------- STEP 1 --------------------
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,14 +34,9 @@ jobs:
         id: dtag
         run: |
           set -e
-          # Get branch name and commit hash
           BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | sed 's/\//_/g')
-          COMMIT_SHA=$(git rev-parse --short HEAD)
-          # Save as environment variables
-          echo "DTAG_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV  
-          echo "DTAG_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+          echo "DTAG_BRANCH=$BRANCH_NAME" >> $GITHUB_ENV
           echo "✅ Branch: $BRANCH_NAME"
-          echo "✅ Commit: $COMMIT_SHA"
 
       # -------------------- STEP 3 --------------------
       - name: Configure AWS credentials
@@ -57,20 +51,24 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
 
       # -------------------- STEP 5 --------------------
-      
-      - name: Build and Push Docker Image
+      - name: Build and Push Docker Image (latest)
         run: |
-         set -e
-         # Create Docker image tag
-         IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:${{ env.DTAG_SHA }}
-         echo "Building Docker image: $IMAGE_URI"
-         # Build the Docker image
-         docker build -t $IMAGE_URI .
-         # Push the Docker image to ECR
-         docker push $IMAGE_URI
-          # Save the image URI for later steps
+          set -e
+          echo "📁 Current directory:"
+          pwd
+          echo "📄 Files in repo root:"
+          ls -la
+
+          cd $GITHUB_WORKSPACE
+
+          IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:latest
+          echo "Building Docker image: $IMAGE_URI"
+
+          docker build -t $IMAGE_URI -f Dockerfile .
+          docker push $IMAGE_URI
+
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
-          echo "✅ Docker image pushed successfully."
+          echo "✅ Docker image pushed successfully as :latest"
 
       # -------------------- STEP 6 --------------------
       - name: Determine Deployment Environment
@@ -108,7 +106,7 @@ jobs:
             --query "services[0].taskDefinition" \
             --output text)
 
-          # Update the container image for 'activity-to-ef-mapping' container
+          # Update container image to use :latest
           aws ecs describe-task-definition --task-definition $OLD_TASK_DEF --query "taskDefinition" | \
             jq --arg IMAGE "$IMAGE_URI" \
             '.containerDefinitions |= map(if .name == "activity-to-ef-mapping" then .image = $IMAGE else . end) |
@@ -121,10 +119,11 @@ jobs:
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
 
-          # Update ECS Service to use the new task definition
+          # Update ECS Service to use new task definition
           aws ecs update-service \
             --cluster $CLUSTER_NAME \
             --service $SERVICE_NAME \
-            --task-definition $NEW_TASK_DEF
+            --task-definition $NEW_TASK_DEF \
+            --force-new-deployment
 
           echo "✅ ECS Service updated successfully!"
