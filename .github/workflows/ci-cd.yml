@@ -56,7 +56,7 @@ jobs:
           set -e
           IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:latest
           echo "Building Docker image: $IMAGE_URI"
-          docker build -t $IMAGE_URI .
+          docker build -t $IMAGE_URI -f ./app/Dockerfile ./app
           docker push $IMAGE_URI
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
           echo "✅ Docker image pushed successfully as :latest"
