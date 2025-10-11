@@ -103,7 +103,7 @@ jobs:
             '.containerDefinitions |= map(if .name == "activity-to-ef-mapping" then .image = $IMAGE else . end) |
              {family: .family, containerDefinitions: .containerDefinitions, taskRoleArn: .taskRoleArn, executionRoleArn: .executionRoleArn, networkMode: .networkMode}' \
             > new-task-def.json
-
+          # logs 
           # Register new task definition
           NEW_TASK_DEF=$(aws ecs register-task-definition \
             --cli-input-json file://new-task-def.json \
