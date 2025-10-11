@@ -61,10 +61,10 @@ jobs:
 
           cd $GITHUB_WORKSPACE
 
-          IMAGE_URI=${{ secrets.AWS_ECR_REPO }}:latest
+          IMAGE_URI=216040615235.dkr.ecr.ap-south-1.amazonaws.com/dev/ai:latest
           echo "Building Docker image: $IMAGE_URI"
 
-          docker build -t $IMAGE_URI -f Dockerfile .
+          docker build -t $IMAGE_URI -f ./app/Dockerfile ./app
           docker push $IMAGE_URI
 
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
