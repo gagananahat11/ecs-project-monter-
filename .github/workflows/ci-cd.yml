@@ -1,3 +1,4 @@
+
 name: Push Docker Image to ECR (OIDC)
 
 on:
@@ -41,7 +42,7 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::963057650842:role/ecr-access  # Replace with your OIDC IAM Role ARN
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsOIDCRole  # Replace with your OIDC IAM Role ARN
           aws-region: ${{ env.AWS_REGION }}
 
       # -------------------- STEP 4 --------------------
