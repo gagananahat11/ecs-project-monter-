@@ -19,7 +19,7 @@ jobs:
       AWS_ACCOUNT_ID: 963057650842          # Replace with your AWS Account ID
       AWS_REGION: us-east-1
       ECR_REPO_NAME: my-sample-repo          # Replace with your ECR repo name
-
+      #
     steps:
       # -------------------- STEP 1 --------------------
       - name: Checkout code
